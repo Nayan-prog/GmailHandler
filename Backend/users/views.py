@@ -1,15 +1,17 @@
-import requests
 from django.shortcuts import redirect
 from django.http import JsonResponse
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-
-from config.google_config import CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
 from .models import Email   # ✅ NEW IMPORT
 
 
 # 🔐 Step 1: Redirect to Google Login
 def google_login(request):
+    try:
+        from config.google_config import CLIENT_ID, REDIRECT_URI
+    except ModuleNotFoundError:
+        return JsonResponse({
+            "error": "Google OAuth config is missing. Add Backend/config/google_config.py"
+        }, status=500)
+
     auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth"
         f"?client_id={CLIENT_ID}"
@@ -24,6 +26,14 @@ def google_login(request):
 
 # 🔄 Step 2: Handle Callback + Get Token
 def google_callback(request):
+    try:
+        import requests
+        from config.google_config import CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
+    except ModuleNotFoundError:
+        return JsonResponse({
+            "error": "Google OAuth config is missing. Add Backend/config/google_config.py"
+        }, status=500)
+
     code = request.GET.get("code")
 
     token_url = "https://oauth2.googleapis.com/token"
@@ -42,7 +52,12 @@ def google_callback(request):
     access_token = token_data.get("access_token")
 
     # 👉 Fetch + Save emails
-    emails = fetch_emails_logic(access_token)
+    try:
+        emails = fetch_emails_logic(access_token)
+    except Exception as exc:
+        return JsonResponse({
+            "error": f"Failed to fetch emails from Gmail: {exc}"
+        }, status=500)
 
     return JsonResponse({
         "token": access_token,
@@ -52,6 +67,9 @@ def google_callback(request):
 
 # 📥 Step 3: Fetch Emails + Save to PostgreSQL
 def fetch_emails_logic(access_token):
+    from googleapiclient.discovery import build
+    from google.oauth2.credentials import Credentials
+
     creds = Credentials(token=access_token)
 
     service = build('gmail', 'v1', credentials=creds)

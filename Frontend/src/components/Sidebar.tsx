@@ -1,19 +1,7 @@
-import {
-  CircleAlert,
-  Inbox,
-  Megaphone,
-  Send,
-  ShieldAlert,
-  Users,
-} from 'lucide-react'
+import { CircleAlert, Inbox, Megaphone, Send, ShieldAlert, Users } from 'lucide-react'
 import type { ComponentType } from 'react'
 
-export type NavView =
-  | 'inbox'
-  | 'important'
-  | 'promotions'
-  | 'social'
-  | 'spam'
+export type NavView = 'inbox' | 'important' | 'promotions' | 'social' | 'spam'
 
 interface SidebarProps {
   activeView: NavView

@@ -1,19 +1,17 @@
-import axios from 'axios'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Mail, RefreshCcw, SendHorizontal } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { ContactCard } from '../components/ContactCard'
-import { emails as fallbackEmails } from '../data/mockData'
 import { EmailCard } from '../components/EmailCard'
 import { EmailDetail } from '../components/EmailDetail'
 import { EmptyState } from '../components/EmptyState'
 import { FilterModal } from '../components/FilterModal'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import type { NavView } from '../components/Sidebar'
+import { emails as backupEmails } from '../data/mockData'
 import { useTheme } from '../hooks/useTheme'
 import { DashboardLayout } from '../layouts/DashboardLayout'
 import { apiClient } from '../lib/api'
-import type { ApiEmail, Contact, Email, EmailCategory, InboxFilterState } from '../types/email'
-
-const FALLBACK_CONTACT_CLASSES = ['bg-teal-500/90', 'bg-orange-500/90', 'bg-indigo-500/90', 'bg-pink-500/90', 'bg-sky-500/90']
+import type { ApiEmail, Contact, DateRangeFilter, Email, InboxFilterState } from '../types/email'
 
 const DEFAULT_FILTERS: InboxFilterState = {
   sender: '',
@@ -22,392 +20,388 @@ const DEFAULT_FILTERS: InboxFilterState = {
   readStatus: 'all',
 }
 
-const parseSender = (senderRaw: string) => {
-  const pattern = /^(.*?)(?:\s*<(.+?)>)?$/
-  const match = senderRaw.match(pattern)
-  const senderName = match?.[1]?.trim().replaceAll('"', '') || senderRaw
-  const senderEmail = match?.[2]?.trim() || `${senderName.toLowerCase().replace(/\s+/g, '.')}@mail.local`
-  return { senderName, senderEmail }
+const AVATAR_CLASSES = [
+  'bg-gradient-to-br from-cyan-500 to-blue-500',
+  'bg-gradient-to-br from-fuchsia-500 to-pink-500',
+  'bg-gradient-to-br from-emerald-500 to-teal-500',
+  'bg-gradient-to-br from-amber-500 to-orange-500',
+  'bg-gradient-to-br from-violet-500 to-indigo-500',
+]
+
+const PRIORITIES: Email['priority'][] = ['normal', 'important', 'urgent']
+const CATEGORIES: Email['category'][] = ['inbox', 'important', 'promotions', 'social', 'spam']
+
+const toInitials = (name: string) => {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
 }
 
-const detectCategory = (subject: string, sender: string): EmailCategory => {
-  const text = `${subject} ${sender}`.toLowerCase()
-
-  if (/security|alert|password|invoice|contract|urgent|blocked/.test(text)) {
-    return 'important'
+const parseSender = (sender: string) => {
+  const match = sender.match(/(.*)<([^>]+)>/)
+  if (!match) {
+    const fallbackName = sender.includes('@') ? sender.split('@')[0] : sender
+    return {
+      senderName: fallbackName.trim() || 'Unknown Sender',
+      senderEmail: sender.includes('@') ? sender.trim() : 'unknown@example.com',
+    }
   }
-  if (/promo|offer|sale|discount|amazon|deal|campaign/.test(text)) {
-    return 'promotions'
-  }
-  if (/linkedin|instagram|facebook|x\.com|social/.test(text)) {
-    return 'social'
-  }
-  if (/win|gift card|claim|lottery|crypto|suspicious/.test(text)) {
-    return 'spam'
-  }
-
-  return 'inbox'
-}
-
-const detectPriority = (subject: string): Email['priority'] => {
-  const value = subject.toLowerCase()
-  if (/urgent|asap|immediately|blocked|eod/.test(value)) {
-    return 'urgent'
-  }
-  if (/important|follow up|review|approval/.test(value)) {
-    return 'important'
-  }
-  return 'normal'
-}
-
-const formatTimeLabel = (timestamp: Date) => {
-  const now = new Date()
-  const msInDay = 24 * 60 * 60 * 1000
-  const dayDiff = Math.floor((now.getTime() - timestamp.getTime()) / msInDay)
-
-  if (dayDiff <= 0) {
-    return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-  if (dayDiff === 1) {
-    return 'Yesterday'
-  }
-  if (dayDiff < 7) {
-    return timestamp.toLocaleDateString([], { weekday: 'short' })
-  }
-  return timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' })
-}
-
-const mapApiEmail = (item: ApiEmail, index: number): Email => {
-  const { senderName, senderEmail } = parseSender(item.sender)
-  const timestamp = new Date(Date.now() - index * 1000 * 60 * 43)
 
   return {
-    id: item.id,
-    senderName,
-    senderEmail,
-    subject: item.subject || 'No subject',
-    preview: item.snippet || 'No preview available.',
-    body:
-      item.snippet ||
-      'This message body is not available yet. Integrate a full-email endpoint to show complete content.',
-    timeLabel: formatTimeLabel(timestamp),
-    timestamp,
-    category: detectCategory(item.subject, item.sender),
-    priority: detectPriority(item.subject),
-    unread: index % 3 !== 0,
-    hasAttachments: /pdf|invoice|attachment|doc/i.test(item.subject),
-    summary: item.snippet || 'No AI summary generated for this email yet.',
-    suggestedReplies: ['Thanks, received.', 'I will review and reply shortly.', 'Please share more details.'],
+    senderName: match[1].replace(/\"/g, '').trim() || match[2].split('@')[0],
+    senderEmail: match[2].trim(),
   }
 }
 
-const buildContacts = (emails: Email[]): Contact[] => {
-  const unique = new Map<string, Contact>()
+const toRelativeTimeLabel = (date: Date) => {
+  const now = Date.now()
+  const diffMs = now - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
 
-  emails.forEach((email, index) => {
-    if (unique.has(email.senderEmail)) {
-      return
-    }
+  if (diffHours < 1) {
+    return 'Just now'
+  }
+  if (diffHours < 24) {
+    return `${diffHours}h ago`
+  }
 
-    const names = email.senderName.split(' ').filter(Boolean)
-    const initials = names.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'NA'
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays === 1) {
+    return 'Yesterday'
+  }
+  return `${diffDays}d ago`
+}
 
-    unique.set(email.senderEmail, {
-      id: email.senderEmail,
-      name: email.senderName,
-      email: email.senderEmail,
-      initials,
-      avatarClass: FALLBACK_CONTACT_CLASSES[index % FALLBACK_CONTACT_CLASSES.length],
-    })
-  })
+const mapApiEmail = (email: ApiEmail, index: number): Email => {
+  const sender = parseSender(email.sender)
+  const timestamp = new Date(Date.now() - index * 1000 * 60 * 47)
 
-  return Array.from(unique.values())
+  return {
+    id: email.id,
+    senderName: sender.senderName,
+    senderEmail: sender.senderEmail,
+    subject: email.subject || '(No subject)',
+    preview: email.snippet || 'No preview available.',
+    body: email.snippet || 'No content available for this email right now.',
+    timeLabel: toRelativeTimeLabel(timestamp),
+    timestamp,
+    category: CATEGORIES[index % CATEGORIES.length],
+    priority: PRIORITIES[index % PRIORITIES.length],
+    unread: index % 3 !== 0,
+    hasAttachments: index % 4 === 0,
+    summary: `This email appears to be about: ${email.subject || 'an update'}. ${email.snippet || 'Open it for details.'}`,
+    suggestedReplies: ['Thanks, I have noted this.', 'Can you share more detail?', 'Received. I will get back to you shortly.'],
+  }
+}
+
+const isWithinRange = (timestamp: Date, range: DateRangeFilter) => {
+  if (range === 'all') {
+    return true
+  }
+
+  const now = Date.now()
+  const diff = now - timestamp.getTime()
+  const dayMs = 1000 * 60 * 60 * 24
+
+  if (range === '24h') {
+    return diff <= dayMs
+  }
+  if (range === '7d') {
+    return diff <= dayMs * 7
+  }
+  return diff <= dayMs * 30
 }
 
 export const InboxPage = () => {
   const { theme, toggleTheme } = useTheme()
 
-  const [activeView, setActiveView] = useState<NavView>('inbox')
-  const [query, setQuery] = useState('')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [filterModalOpen, setFilterModalOpen] = useState(false)
-  const [filters, setFilters] = useState<InboxFilterState>(DEFAULT_FILTERS)
-
   const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState('')
+  const [error, setError] = useState('')
+  const [activeView, setActiveView] = useState<NavView>('inbox')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [filters, setFilters] = useState<InboxFilterState>(DEFAULT_FILTERS)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null)
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
-
-  const fetchEmails = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true)
-    setErrorMessage('')
-
-    try {
-      const response = await apiClient.get<{ emails?: ApiEmail[] } | ApiEmail[]>('/api/emails/', {
-        signal,
-      })
-
-      const payload = Array.isArray(response.data) ? response.data : response.data.emails || []
-      const mappedEmails = payload.map(mapApiEmail)
-      setEmails(mappedEmails)
-      setSelectedEmailId((current) => current ?? mappedEmails[0]?.id ?? null)
-    } catch (error) {
-      if (axios.isCancel(error)) {
-        return
-      }
-
-      setEmails((current) => (current.length > 0 ? current : fallbackEmails.slice(0, 9)))
-      setSelectedEmailId((current) => current ?? fallbackEmails[0]?.id ?? null)
-      setErrorMessage('Backend API is currently unreachable. Showing local inbox data. Start Django on port 8000 and click Retry.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const [replyDraft, setReplyDraft] = useState('')
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
-    void fetchEmails(controller.signal)
-    return () => controller.abort()
-  }, [fetchEmails])
 
-  const contacts = useMemo(() => buildContacts(emails), [emails])
+    const loadEmails = async () => {
+      setLoading(true)
+      setError('')
+
+      try {
+        const response = await apiClient.get<{ emails?: ApiEmail[] } | ApiEmail[]>('/api/emails/', {
+          signal: controller.signal,
+        })
+
+        const payload = Array.isArray(response.data) ? response.data : response.data.emails || []
+        const mapped = payload.map(mapApiEmail)
+
+        if (mapped.length > 0) {
+          setEmails(mapped)
+          return
+        }
+
+        setEmails(backupEmails)
+        setError('No backend emails were returned, showing saved sample data.')
+      } catch {
+        setEmails(backupEmails)
+        setError('Backend fetch failed. Showing saved sample data while the API reconnects.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void loadEmails()
+    return () => controller.abort()
+  }, [attempt])
 
   const filteredEmails = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    const normalizedSender = filters.sender.trim().toLowerCase()
+    const senderFilter = filters.sender.trim().toLowerCase()
+    const queryValue = query.trim().toLowerCase()
 
-    return emails
-      .filter((email) => email.category === activeView)
-      .filter((email) => {
-        if (!normalizedQuery) {
-          return true
-        }
+    return emails.filter((email) => {
+      if (activeView !== 'inbox' && email.category !== activeView) {
+        return false
+      }
 
-        return (
-          email.senderName.toLowerCase().includes(normalizedQuery) ||
-          email.senderEmail.toLowerCase().includes(normalizedQuery) ||
-          email.subject.toLowerCase().includes(normalizedQuery) ||
-          email.preview.toLowerCase().includes(normalizedQuery)
-        )
-      })
-      .filter((email) => {
-        if (!normalizedSender) {
-          return true
-        }
-        return (
-          email.senderName.toLowerCase().includes(normalizedSender) ||
-          email.senderEmail.toLowerCase().includes(normalizedSender)
-        )
-      })
-      .filter((email) => {
-        if (selectedContactId === null) {
-          return true
-        }
-        return email.senderEmail === selectedContactId
-      })
-      .filter((email) => {
-        if (filters.readStatus === 'all') {
-          return true
-        }
-        if (filters.readStatus === 'unread') {
-          return email.unread
-        }
-        return !email.unread
-      })
-      .filter((email) => {
-        if (!filters.attachmentsOnly) {
-          return true
-        }
-        return email.hasAttachments
-      })
-      .filter((email) => {
-        if (filters.dateRange === 'all') {
-          return true
-        }
+      if (filters.readStatus === 'read' && email.unread) {
+        return false
+      }
+      if (filters.readStatus === 'unread' && !email.unread) {
+        return false
+      }
 
-        const now = new Date()
-        const diff = now.getTime() - email.timestamp.getTime()
-        const diffHours = diff / (1000 * 60 * 60)
+      if (filters.attachmentsOnly && !email.hasAttachments) {
+        return false
+      }
 
-        if (filters.dateRange === '24h') {
-          return diffHours <= 24
-        }
-        if (filters.dateRange === '7d') {
-          return diffHours <= 24 * 7
-        }
-        return diffHours <= 24 * 30
-      })
-  }, [activeView, emails, filters, query, selectedContactId])
+      if (!isWithinRange(email.timestamp, filters.dateRange)) {
+        return false
+      }
 
-  const selectedEmail = useMemo(
-    () => filteredEmails.find((email) => email.id === selectedEmailId) ?? null,
-    [filteredEmails, selectedEmailId],
-  )
+      if (senderFilter) {
+        const senderMatch = `${email.senderName} ${email.senderEmail}`.toLowerCase()
+        if (!senderMatch.includes(senderFilter)) {
+          return false
+        }
+      }
+
+      if (!queryValue) {
+        return true
+      }
+
+      const searchScope = `${email.senderName} ${email.senderEmail} ${email.subject} ${email.preview} ${email.body}`.toLowerCase()
+      return searchScope.includes(queryValue)
+    })
+  }, [activeView, emails, filters, query])
 
   useEffect(() => {
-    if (!selectedEmailId && filteredEmails.length > 0) {
-      setSelectedEmailId(filteredEmails[0].id)
+    if (filteredEmails.length === 0) {
+      setSelectedEmailId(null)
       return
     }
 
-    if (selectedEmailId && !filteredEmails.some((email) => email.id === selectedEmailId)) {
-      setSelectedEmailId(filteredEmails[0]?.id ?? null)
+    const exists = filteredEmails.some((email) => email.id === selectedEmailId)
+    if (!exists) {
+      setSelectedEmailId(filteredEmails[0].id)
     }
   }, [filteredEmails, selectedEmailId])
 
-  const removeEmail = (emailId: string) => {
-    setEmails((current) => current.filter((email) => email.id !== emailId))
-    if (selectedEmailId === emailId) {
-      setSelectedEmailId(null)
+  const selectedEmail = filteredEmails.find((email) => email.id === selectedEmailId) ?? null
+
+  const contacts: Contact[] = useMemo(() => {
+    const seen = new Set<string>()
+    const list: Contact[] = []
+
+    for (const email of filteredEmails) {
+      if (seen.has(email.senderEmail)) {
+        continue
+      }
+      seen.add(email.senderEmail)
+
+      list.push({
+        id: email.senderEmail,
+        name: email.senderName,
+        email: email.senderEmail,
+        initials: toInitials(email.senderName || email.senderEmail),
+        avatarClass: AVATAR_CLASSES[list.length % AVATAR_CLASSES.length],
+      })
+
+      if (list.length >= 8) {
+        break
+      }
     }
+
+    return list
+  }, [filteredEmails])
+
+  const stats = useMemo(() => {
+    const unread = emails.filter((email) => email.unread).length
+    const urgent = emails.filter((email) => email.priority === 'urgent').length
+    const attachments = emails.filter((email) => email.hasAttachments).length
+
+    return [
+      { id: 'unread', label: 'Unread', value: String(unread) },
+      { id: 'urgent', label: 'Urgent', value: String(urgent) },
+      { id: 'files', label: 'Attachments', value: String(attachments) },
+    ]
+  }, [emails])
+
+  const markEmailRead = (emailId: string) => {
+    setEmails((current) => current.map((email) => (email.id === emailId ? { ...email, unread: false } : email)))
   }
 
-  const markAsRead = (emailId: string) => {
-    setEmails((current) =>
-      current.map((email) => {
-        if (email.id !== emailId) {
-          return email
-        }
+  const archiveEmail = (emailId: string) => {
+    setEmails((current) => current.filter((email) => email.id !== emailId))
+  }
 
-        return {
-          ...email,
-          unread: false,
-        }
-      }),
-    )
+  const deleteEmail = (emailId: string) => {
+    setEmails((current) => current.filter((email) => email.id !== emailId))
   }
 
   return (
-    <>
-      <DashboardLayout
-        activeView={activeView}
-        onViewChange={setActiveView}
-        sidebarOpen={sidebarOpen}
-        onSidebarClose={() => setSidebarOpen(false)}
-        onSidebarOpen={() => setSidebarOpen(true)}
-        query={query}
-        onQueryChange={setQuery}
-        onOpenFilters={() => setFilterModalOpen(true)}
-        theme={theme}
-        onThemeToggle={toggleTheme}
-      >
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-['Space_Grotesk'] text-2xl font-semibold text-slate-900 dark:text-slate-100">Smart Inbox</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{filteredEmails.length} results</p>
-            </div>
+    <DashboardLayout
+      activeView={activeView}
+      onViewChange={setActiveView}
+      sidebarOpen={sidebarOpen}
+      onSidebarClose={() => setSidebarOpen(false)}
+      onSidebarOpen={() => setSidebarOpen(true)}
+      query={query}
+      onQueryChange={setQuery}
+      onOpenFilters={() => setIsFilterOpen(true)}
+      theme={theme}
+      onThemeToggle={toggleTheme}
+    >
+      <FilterModal
+        isOpen={isFilterOpen}
+        initialFilters={filters}
+        onApply={setFilters}
+        onReset={() => {
+          setFilters(DEFAULT_FILTERS)
+          setIsFilterOpen(false)
+        }}
+        onClose={() => setIsFilterOpen(false)}
+      />
 
-            {errorMessage && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span>{errorMessage}</span>
-                  <button
-                    type="button"
-                    onClick={() => void fetchEmails()}
-                    className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30"
-                  >
-                    Retry
-                  </button>
-                </div>
-              </div>
-            )}
+      {error && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-400/60 px-3 py-1.5 text-xs font-medium transition hover:bg-amber-100 dark:hover:bg-amber-500/20"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
+            Retry API
+          </button>
+        </div>
+      )}
 
-            <div className="max-h-[calc(100vh-12.5rem)] space-y-3 overflow-y-auto pr-1">
-              {loading && <LoadingSkeleton />}
-              {!loading && filteredEmails.length === 0 && (
-                <EmptyState
-                  onClear={() => {
-                    setQuery('')
-                    setSelectedContactId(null)
-                    setFilters(DEFAULT_FILTERS)
-                  }}
-                />
-              )}
-              {!loading &&
-                filteredEmails.map((email) => (
-                  <EmailCard
-                    key={email.id}
-                    email={email}
-                    isActive={selectedEmailId === email.id}
-                    onOpen={() => {
-                      setSelectedEmailId(email.id)
-                      if (email.unread) {
-                        markAsRead(email.id)
-                      }
-                    }}
-                    onArchive={() => removeEmail(email.id)}
-                    onDelete={() => removeEmail(email.id)}
-                    onMarkRead={() => markAsRead(email.id)}
-                  />
-                ))}
-            </div>
-          </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        {stats.map((stat) => (
+          <article
+            key={stat.id}
+            className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          >
+            <p className="text-xs uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">{stat.label}</p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{stat.value}</p>
+          </article>
+        ))}
+      </section>
 
-          <div className="space-y-4">
-            <EmailDetail email={selectedEmail} onUseReply={() => undefined} />
+      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-3">
+          {loading ? (
+            <LoadingSkeleton />
+          ) : filteredEmails.length === 0 ? (
+            <EmptyState
+              onClear={() => {
+                setQuery('')
+                setFilters(DEFAULT_FILTERS)
+                setActiveView('inbox')
+              }}
+            />
+          ) : (
+            filteredEmails.map((email) => (
+              <EmailCard
+                key={email.id}
+                email={email}
+                isActive={selectedEmailId === email.id}
+                onOpen={() => {
+                  setSelectedEmailId(email.id)
+                  markEmailRead(email.id)
+                }}
+                onArchive={() => archiveEmail(email.id)}
+                onDelete={() => deleteEmail(email.id)}
+                onMarkRead={() => markEmailRead(email.id)}
+              />
+            ))
+          )}
+        </div>
 
-            <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center justify-between">
-                <h3 className="font-['Space_Grotesk'] text-lg font-semibold text-slate-900 dark:text-slate-100">Frequent Contacts</h3>
-                <button
-                  type="button"
-                  onClick={() => setSelectedContactId(null)}
-                  className="text-xs font-medium text-teal-600 transition hover:text-teal-500 dark:text-teal-300"
-                >
-                  Clear
-                </button>
-              </div>
-              <div className="mt-3 space-y-2">
-                {contacts.slice(0, 6).map((contact) => (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">
+              <Mail className="h-3.5 w-3.5" />
+              Top Contacts
+            </p>
+            <div className="mt-3 space-y-2">
+              {contacts.length > 0 ? (
+                contacts.map((contact) => (
                   <ContactCard
                     key={contact.id}
                     contact={contact}
-                    isActive={selectedContactId === contact.id}
-                    onSelect={() => setSelectedContactId(contact.id)}
+                    isActive={selectedEmail?.senderEmail === contact.email}
+                    onSelect={() => {
+                      const firstMatch = filteredEmails.find((email) => email.senderEmail === contact.email)
+                      if (firstMatch) {
+                        setSelectedEmailId(firstMatch.id)
+                      }
+                    }}
                   />
-                ))}
-              </div>
-
-              <div className="mt-5">
-                <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Quick Filters</h4>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFilters((current) => ({ ...current, readStatus: 'unread' }))}
-                    className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    Unread
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilters((current) => ({ ...current, attachmentsOnly: true }))}
-                    className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    Attachments
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilters((current) => ({ ...current, dateRange: '7d' }))}
-                    className="rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                  >
-                    Last 7 days
-                  </button>
-                </div>
-              </div>
-            </aside>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">No contacts available for this selection.</p>
+              )}
+            </div>
           </div>
-        </section>
-      </DashboardLayout>
 
-      <FilterModal
-        isOpen={filterModalOpen}
-        initialFilters={filters}
-        onApply={setFilters}
-        onReset={() => setFilters(DEFAULT_FILTERS)}
-        onClose={() => setFilterModalOpen(false)}
-      />
-    </>
+          <EmailDetail
+            email={selectedEmail}
+            onUseReply={(reply) => {
+              setReplyDraft(reply)
+            }}
+          />
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Quick Reply</p>
+            <textarea
+              value={replyDraft}
+              onChange={(event) => setReplyDraft(event.target.value)}
+              placeholder="Write a short response..."
+              className="mt-2 h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-500 dark:border-slate-700 dark:bg-slate-950"
+            />
+            <button
+              type="button"
+              disabled={!replyDraft.trim()}
+              onClick={() => setReplyDraft('')}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400"
+            >
+              <SendHorizontal className="h-4 w-4" />
+              Send Reply
+            </button>
+          </div>
+        </div>
+      </section>
+    </DashboardLayout>
   )
 }

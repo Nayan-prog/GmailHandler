@@ -5,20 +5,8 @@ type Theme = 'light' | 'dark'
 const STORAGE_KEY = 'gmailhandler-theme'
 
 const getPreferredTheme = (): Theme => {
-  if (typeof window === 'undefined') {
-    return 'light'
-  }
-
-  try {
-    const storedTheme = window.localStorage.getItem(STORAGE_KEY)
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      return storedTheme
-    }
-  } catch {
-    // Ignore storage access issues in restricted browser contexts.
-  }
-
-  return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ? 'dark' : 'light'
+  // Start in light mode by default for consistent inbox readability.
+  return 'light'
 }
 
 export const useTheme = () => {
@@ -26,16 +14,10 @@ export const useTheme = () => {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
-    try {
-      window.localStorage.setItem(STORAGE_KEY, theme)
-    } catch {
-      // Ignore storage access issues in restricted browser contexts.
-    }
+    window.localStorage.setItem(STORAGE_KEY, theme)
   }, [theme])
 
-  const toggleTheme = () => {
-    setTheme((currentTheme) => (currentTheme === 'light' ? 'dark' : 'light'))
-  }
+  const toggleTheme = () => setTheme((current) => (current === 'light' ? 'dark' : 'light'))
 
   return { theme, toggleTheme }
 }

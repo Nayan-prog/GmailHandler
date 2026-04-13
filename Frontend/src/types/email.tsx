@@ -1,9 +1,4 @@
-export type EmailCategory =
-  | 'inbox'
-  | 'important'
-  | 'promotions'
-  | 'social'
-  | 'spam'
+export type EmailCategory = 'inbox' | 'important' | 'promotions' | 'social' | 'spam'
 
 export type EmailPriority = 'normal' | 'important' | 'urgent'
 

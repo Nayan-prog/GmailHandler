@@ -1,4 +1,4 @@
-import type { ChartPoint, Contact, DashboardStat, Email } from '../types/email'
+import type { Email } from '../types/email'
 
 const now = new Date()
 
@@ -8,16 +8,6 @@ const ago = (days: number, hours = 0) => {
   date.setHours(date.getHours() - hours)
   return date
 }
-
-export const contacts: Contact[] = [
-  { id: 'c1', name: 'Ariana Patel', email: 'ariana@nova.ai', initials: 'AP', avatarClass: 'bg-teal-500/90' },
-  { id: 'c2', name: 'Marcus Lee', email: 'marcus@orbitlabs.io', initials: 'ML', avatarClass: 'bg-orange-500/90' },
-  { id: 'c3', name: 'Sofia Khan', email: 'sofia@fabrikam.com', initials: 'SK', avatarClass: 'bg-indigo-500/90' },
-  { id: 'c4', name: 'Daniel Wong', email: 'daniel@contoso.com', initials: 'DW', avatarClass: 'bg-pink-500/90' },
-  { id: 'c5', name: 'Priya Nair', email: 'priya@marketloop.app', initials: 'PN', avatarClass: 'bg-sky-500/90' },
-  { id: 'c6', name: 'Noah Smith', email: 'noah@amazon.com', initials: 'NS', avatarClass: 'bg-lime-500/90' },
-  { id: 'c7', name: 'Olivia Brown', email: 'olivia@linkedin.com', initials: 'OB', avatarClass: 'bg-rose-500/90' },
-]
 
 export const emails: Email[] = [
   {
@@ -84,108 +74,4 @@ export const emails: Email[] = [
     summary: 'Profile engagement digest and job recommendation highlights.',
     suggestedReplies: ['No response needed.'],
   },
-  {
-    id: 'e5',
-    senderName: 'System Alert',
-    senderEmail: 'alerts@contoso.com',
-    subject: 'Unusual login attempt detected',
-    preview: 'We blocked a login attempt from a new device. Please verify account activity.',
-    body: 'A login attempt from a new location was blocked. Review account sessions and reset password if this was not you.',
-    timeLabel: 'Tue',
-    timestamp: ago(2, 8),
-    category: 'important',
-    priority: 'urgent',
-    unread: true,
-    hasAttachments: false,
-    summary: 'Security alert: blocked login attempt from unfamiliar location.',
-    suggestedReplies: ['This was not me. Begin security reset.', 'Confirmed, this was my device.'],
-  },
-  {
-    id: 'e6',
-    senderName: 'Promo Deals',
-    senderEmail: 'offers@marketloop.app',
-    subject: 'Spring campaign assets',
-    preview: 'New templates are available for social and display campaigns this quarter.',
-    body: 'You have access to fresh campaign templates and budget planners for spring promotions.',
-    timeLabel: 'Mon',
-    timestamp: ago(3, 3),
-    category: 'promotions',
-    priority: 'normal',
-    unread: false,
-    hasAttachments: true,
-    summary: 'Campaign templates and planners for spring promo launch.',
-    suggestedReplies: ['Share the performance benchmark deck too.', 'Thanks, reviewing with the design team.'],
-  },
-  {
-    id: 'e7',
-    senderName: 'Calendar Bot',
-    senderEmail: 'calendar@fabrikam.com',
-    subject: 'Reschedule request: Product review',
-    preview: 'Two attendees requested moving the meeting from Wednesday to Thursday.',
-    body: 'The product review can be rescheduled to Thursday 2:00 PM. Please confirm if this works for you.',
-    timeLabel: 'Sun',
-    timestamp: ago(4, 5),
-    category: 'inbox',
-    priority: 'important',
-    unread: false,
-    hasAttachments: false,
-    summary: 'Meeting reschedule request pending your confirmation.',
-    suggestedReplies: ['Thursday 2 PM works.', 'Please keep Wednesday and share recording for absentees.'],
-  },
-  {
-    id: 'e8',
-    senderName: 'Unknown Sender',
-    senderEmail: 'win-prize-now@unknown.net',
-    subject: 'You won a free gift card!!!',
-    preview: 'Click now to claim your instant reward before it expires in one hour.',
-    body: 'This is a promotional message flagged as suspicious by the system.',
-    timeLabel: 'Sun',
-    timestamp: ago(4, 6),
-    category: 'spam',
-    priority: 'normal',
-    unread: true,
-    hasAttachments: false,
-    summary: 'Likely spam with urgent click-through language.',
-    suggestedReplies: ['No response needed.'],
-  },
-  {
-    id: 'e9',
-    senderName: 'Priya Nair',
-    senderEmail: 'priya@marketloop.app',
-    subject: 'Client feedback on Q2 pitch',
-    preview: 'They loved the narrative. Need stronger ROI proof on slide 12 and 13.',
-    body: 'Great response from the client. We need updated ROI calculations and a stronger data point for two slides.',
-    timeLabel: 'Sat',
-    timestamp: ago(5, 2),
-    category: 'important',
-    priority: 'important',
-    unread: false,
-    hasAttachments: true,
-    summary: 'Positive client feedback; revise ROI evidence on two specific slides.',
-    suggestedReplies: ['I will update ROI slides by tomorrow.', 'Can you share the exact client comments?'],
-  },
-]
-
-export const dashboardStats: DashboardStat[] = [
-  { id: 's1', label: 'Emails Received Today', value: '124', delta: '+12%' },
-  { id: 's2', label: 'Avg. Response Time', value: '38m', delta: '-8%' },
-  { id: 's3', label: 'Active Contacts', value: '47', delta: '+5%' },
-]
-
-export const emailsPerDay: ChartPoint[] = [
-  { label: 'Mon', value: 42 },
-  { label: 'Tue', value: 56 },
-  { label: 'Wed', value: 48 },
-  { label: 'Thu', value: 62 },
-  { label: 'Fri', value: 71 },
-  { label: 'Sat', value: 33 },
-  { label: 'Sun', value: 28 },
-]
-
-export const categoryDistribution: ChartPoint[] = [
-  { label: 'Important', value: 32 },
-  { label: 'Inbox', value: 26 },
-  { label: 'Promotions', value: 20 },
-  { label: 'Social', value: 14 },
-  { label: 'Spam', value: 8 },
 ]
